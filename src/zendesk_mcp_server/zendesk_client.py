@@ -9,6 +9,13 @@ from zenpy import Zenpy
 from zenpy.lib.api_objects import Comment
 from zenpy.lib.api_objects import Ticket as ZenpyTicket
 
+# Default saved search query. Edit this to change what `search_tickets`
+# returns when called with no query argument.
+DEFAULT_TICKET_QUERY = (
+    'type:ticket status:open status:new '
+    '-tags:"zapier_managed_services" -tags:"zapier_backlog" '
+    'group:"Zapier"'
+)
 
 class ZendeskClient:
     def __init__(self, subdomain: str, email: str, token: str):
@@ -242,6 +249,37 @@ class ZendeskClient:
             raise Exception(f"Failed to get latest tickets: HTTP {e.code} - {e.reason}. {error_body}")
         except Exception as e:
             raise Exception(f"Failed to get latest tickets: {str(e)}")
+
+    def search_tickets(self, query: str | None = None, max_results: int = 100) -> list[dict]:
+        """
+        Search tickets using Zendesk search syntax.
+
+        Args:
+                  query: A Zendesk search string. If None, uses DEFAULT_TICKET_QUERY.
+                  max_results: Hard cap on returned tickets (avoids runaway pagination).
+
+        Returns:
+                  A list of dicts with essential ticket fields.
+        """
+        search_query = query if query else DEFAULT_TICKET_QUERY
+
+        results = []
+        # zenpy's search() returns a ResultGenerator that auto-paginates on iteration.
+        for ticket in self.client.search(query=search_query):
+            results.append({
+                "id": ticket.id,
+                "subject": ticket.subject,
+                "status": ticket.status,
+                "priority": ticket.priority,
+                "group_id": getattr(ticket, "group_id", None),
+                "assignee_id": getattr(ticket, "assignee_id", None),
+                "tags": list(getattr(ticket, "tags", []) or []),
+                "created_at": str(getattr(ticket, "created_at", "")),
+                "updated_at": str(getattr(ticket, "updated_at", "")),
+            })
+            if len(results) >= max_results:
+                break
+        return results
 
     def get_all_articles(self) -> Dict[str, Any]:
         """

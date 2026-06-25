@@ -258,9 +258,34 @@ async def handle_list_tools() -> list[types.Tool]:
                 },
                 "required": ["ticket_id"]
             }
+        ),
+        types.Tool(
+            name="search_tickets",
+            description=(
+                "Search Zendesk tickets using Zendesk's search query syntax "
+                "(e.g. 'status:open group:\"Zapier\" -tags:\"backlog\"'). "
+                "If no query is provided, uses the saved default query."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": (
+                            "Zendesk search string. Omit to use the saved "
+                            "DEFAULT_TICKET_QUERY."
+                        ),
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Max tickets to return (default 100).",
+                        "default": 100,
+                    },
+                },
+                "required": [],
+            }
         )
     ]
-
 
 @server.call_tool()
 async def handle_call_tool(
@@ -366,7 +391,14 @@ async def handle_call_tool(
                 type="text",
                 text=json.dumps({"message": "Ticket updated successfully", "ticket": updated}, indent=2)
             )]
-
+        elif name == "search_tickets":
+            query = arguments.get("query")  # None -> falls back to default in client
+            max_results = arguments.get("max_results", 100)
+            tickets = zendesk_client.search_tickets(query=query, max_results=max_results)
+            return [types.TextContent(
+                type="text",
+                text=json.dumps({"tickets": tickets, "count": len(tickets), "query_used": query or "DEFAULT_TICKET_QUERY"}, indent=2)
+            )]
         else:
             raise ValueError(f"Unknown tool: {name}")
 
